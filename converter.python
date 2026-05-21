@@ -1,0 +1,62 @@
+import os
+from PIL import Image
+
+def convert_32bit_to_16bit(input_path, output_path):
+    # 打开输入图像
+    with Image.open(input_path) as img:
+        # 确保图像是 32 位
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        
+        # 创建一个新的图像，模式为 'RGB'
+        img_16bit = Image.new('RGB', img.size)
+        
+        # 获取像素数据
+        pixels = img.load()
+        pixels_16bit = img_16bit.load()
+        
+        # 转换每个像素
+        for y in range(img.size[1]):
+            for x in range(img.size[0]):
+                r, g, b, a = pixels[x, y]
+                r_16 = (r >> 3) << 11
+                g_16 = (g >> 2) << 5
+                b_16 = b >> 3
+                rgb_16 = r_16 | g_16 | b_16
+                # 使用位移和掩码来拆分 16 位 RGB 值
+                r_8 = (rgb_16 >> 11) & 0x1F
+                g_8 = (rgb_16 >> 5) & 0x3F
+                b_8 = rgb_16 & 0x1F
+                # 扩展颜色分量到 8 位
+                r_8 = (r_8 << 3) | (r_8 >> 2)
+                g_8 = (g_8 << 2) | (g_8 >> 4)
+                b_8 = (b_8 << 3) | (b_8 >> 2)
+                pixels_16bit[x, y] = (r_8, g_8, b_8)
+        
+        # 保存为 BMP 文件
+        img_16bit.save(output_path, format='BMP')
+
+# 获取用户输入
+input_folder = input('Enter the input folder path: ')
+output_folder = input('Enter the output folder path: ')
+
+# 确保输入路径存在
+if not os.path.exists(input_folder):
+    print(f"The input folder '{input_folder}' does not exist.")
+    exit(1)
+
+# 确保输出路径存在，如果不存在则创建
+if not os.path.exists(output_folder):
+    os.makedirs(output_folder)
+
+# 遍历输入文件夹中的所有图像文件
+for file_name in os.listdir(input_folder):
+    input_path = os.path.join(input_folder, file_name)
+    output_path = os.path.join(output_folder, os.path.splitext(file_name)[0] + '_16bit.bmp')
+    
+    # 确保只处理图像文件
+    if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+        convert_32bit_to_16bit(input_path, output_path)
+        print(f"Converted '{input_path}' to '{output_path}'")
+    else:
+        print(f"Skipping non-image file: {file_name}")
