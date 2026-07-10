@@ -15,9 +15,15 @@
 #define APP_USART6_RX_LEN 1500U
 #define APP_DEBUG_RX_LEN 200U
 
+#if defined(__has_include)
+#if __has_include("app_config_local.h")
+#include "app_config_local.h"
+#endif
+#endif
+
 /*
  * Keep credentials out of git. Define these in CubeIDE project symbols or a
- * local, ignored config header if the ESP8266 client is enabled.
+ * local, ignored app_config_local.h if the ESP8266 client is enabled.
  */
 #ifndef VPC_WIFI_SSID
 #define VPC_WIFI_SSID ""

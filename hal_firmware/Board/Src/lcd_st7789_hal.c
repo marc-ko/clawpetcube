@@ -46,13 +46,37 @@ void LCD_Address_Set(u16 x1, u16 y1, u16 x2, u16 y2)
     LCD_WR_REG(0x2C);
 }
 
-void LCD_WritePixels_DMA(const uint16_t *pixels, uint32_t count)
+HAL_StatusTypeDef LCD_WritePixels(const uint16_t *pixels, uint32_t count)
+{
+    HAL_StatusTypeDef status;
+    uint32_t bytes_remaining = count * 2U;
+    const uint8_t *data = (const uint8_t *)pixels;
+
+    LCD_DC_Set();
+    LCD_CS_Clr();
+    while (bytes_remaining > 0U) {
+        uint16_t chunk = (bytes_remaining > 0xFFFFU) ? 0xFFFFU : (uint16_t)bytes_remaining;
+        status = HAL_SPI_Transmit(&hspi1, (uint8_t *)data, chunk, 100U);
+        if (status != HAL_OK) {
+            LCD_CS_Set();
+            return status;
+        }
+        data += chunk;
+        bytes_remaining -= chunk;
+    }
+    LCD_CS_Set();
+    return HAL_OK;
+}
+
+HAL_StatusTypeDef LCD_WritePixels_DMA(const uint16_t *pixels, uint32_t count)
 {
     LCD_DC_Set();
     LCD_CS_Clr();
-    if (HAL_SPI_Transmit_DMA(&hspi1, (uint8_t *)pixels, count * 2U) != HAL_OK) {
+    HAL_StatusTypeDef status = HAL_SPI_Transmit_DMA(&hspi1, (uint8_t *)pixels, count * 2U);
+    if (status != HAL_OK) {
         LCD_CS_Set();
     }
+    return status;
 }
 
 void LCD_DMA_TxComplete(void)

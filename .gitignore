@@ -64,3 +64,4 @@ Release/VPetCube.hex
 Release/VPetCube.list
 .settings/language.settings.xml
 VPetCube Release.launch
+hal_firmware/Core/Inc/app_config_local.h

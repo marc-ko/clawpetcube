@@ -21,7 +21,8 @@ void LCD_WR_DATA8(u8 dat);
 void LCD_WR_DATA(u16 dat);
 void LCD_WR_DATA_LVGL(u16 dat);
 void LCD_Address_Set(u16 x1, u16 y1, u16 x2, u16 y2);
-void LCD_WritePixels_DMA(const uint16_t *pixels, uint32_t count);
+HAL_StatusTypeDef LCD_WritePixels(const uint16_t *pixels, uint32_t count);
+HAL_StatusTypeDef LCD_WritePixels_DMA(const uint16_t *pixels, uint32_t count);
 void LCD_DMA_TxComplete(void);
 
 #endif

@@ -15,8 +15,8 @@ static void disp_flush(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *co
     uint32_t h = (uint32_t)(area->y2 - area->y1 + 1);
 
     LCD_Address_Set((uint16_t)area->x1, (uint16_t)area->y1, (uint16_t)area->x2, (uint16_t)area->y2);
-    LCD_WritePixels_DMA((const uint16_t *)color_p, w * h);
-    (void)drv;
+    (void)LCD_WritePixels((const uint16_t *)color_p, w * h);
+    lv_disp_flush_ready(drv);
 }
 
 void lv_port_disp_init(void)
@@ -33,7 +33,6 @@ void lv_port_disp_init(void)
 
 void LCD_LVGL_FlushReady(void)
 {
-    lv_disp_flush_ready(&disp_drv);
 }
 
 #else

@@ -2,6 +2,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+volatile uint32_t app_systick_count;
+
 extern void xPortSysTickHandler(void);
 
 void NMI_Handler(void) {}
@@ -30,6 +32,7 @@ void DebugMon_Handler(void) {}
 
 void SysTick_Handler(void)
 {
+    app_systick_count++;
     HAL_IncTick();
     if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED) {
         xPortSysTickHandler();

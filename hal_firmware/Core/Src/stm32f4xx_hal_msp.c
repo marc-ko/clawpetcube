@@ -42,6 +42,19 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
     __HAL_LINKDMA(hspi, hdmatx, hdma_spi1_tx);
 }
 
+void HAL_TIM_Base_MspInit(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM3) {
+        __HAL_RCC_TIM3_CLK_ENABLE();
+        HAL_NVIC_SetPriority(TIM3_IRQn, 6, 0);
+        HAL_NVIC_EnableIRQ(TIM3_IRQn);
+    } else if (htim->Instance == TIM7) {
+        __HAL_RCC_TIM7_CLK_ENABLE();
+        HAL_NVIC_SetPriority(TIM7_IRQn, 6, 0);
+        HAL_NVIC_EnableIRQ(TIM7_IRQn);
+    }
+}
+
 void HAL_UART_MspInit(UART_HandleTypeDef *huart)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
