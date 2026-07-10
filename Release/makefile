@@ -9,15 +9,16 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
--include USER/subdir.mk
--include Startup/subdir.mk
--include SYSTEM/usart/subdir.mk
--include SYSTEM/sys/subdir.mk
--include SYSTEM/delay/subdir.mk
--include Middlewares/LVGL/guiguider/images/subdir.mk
--include Middlewares/LVGL/guiguider/guider_fonts/subdir.mk
--include Middlewares/LVGL/guiguider/subdir.mk
--include Middlewares/LVGL/GUI_APP/subdir.mk
+-include hal_firmware/Middlewares/Third_Party/FreeRTOS/Source/portable/MemMang/subdir.mk
+-include hal_firmware/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F/subdir.mk
+-include hal_firmware/Middlewares/Third_Party/FreeRTOS/Source/subdir.mk
+-include hal_firmware/Middlewares/Third_Party/FatFs/src/subdir.mk
+-include hal_firmware/Drivers/STM32F4xx_HAL_Driver/Src/subdir.mk
+-include hal_firmware/Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/subdir.mk
+-include hal_firmware/Core/Startup/subdir.mk
+-include hal_firmware/Core/Src/subdir.mk
+-include hal_firmware/Compat/Src/subdir.mk
+-include hal_firmware/Board/Src/subdir.mk
 -include Middlewares/LVGL/GUI/lvgl/src/widgets/subdir.mk
 -include Middlewares/LVGL/GUI/lvgl/src/misc/subdir.mk
 -include Middlewares/LVGL/GUI/lvgl/src/hal/subdir.mk
@@ -64,25 +65,6 @@ RM := rm -rf
 -include Middlewares/LVGL/GUI/lvgl/src/draw/nxp_pxp/subdir.mk
 -include Middlewares/LVGL/GUI/lvgl/src/draw/subdir.mk
 -include Middlewares/LVGL/GUI/lvgl/src/core/subdir.mk
--include Middlewares/LVGL/GUI/lvgl/examples/porting/subdir.mk
--include Middlewares/FatFs/subdir.mk
--include HARDWARE/USART6/subdir.mk
--include HARDWARE/USART2/subdir.mk
--include HARDWARE/TIMER/subdir.mk
--include HARDWARE/SDIO/subdir.mk
--include HARDWARE/RTC/subdir.mk
--include HARDWARE/MPU6050/eMPL/subdir.mk
--include HARDWARE/MPU6050/subdir.mk
--include HARDWARE/LCD/subdir.mk
--include HARDWARE/IIC/subdir.mk
--include HARDWARE/EXTI/subdir.mk
--include HARDWARE/ESP8266/subdir.mk
--include HARDWARE/ADC/subdir.mk
--include HARDWARE/subdir.mk
--include FreeRTOS/portable/MemMang/subdir.mk
--include FreeRTOS/portable/GCC/ARM_CM4F/subdir.mk
--include FreeRTOS/subdir.mk
--include FWLIB/src/subdir.mk
 -include objects.mk
 
 ifneq ($(MAKECMDGOALS),clean)
@@ -105,37 +87,37 @@ $(wildcard ../makefile.init) \
 $(wildcard ../makefile.targets) \
 
 
-BUILD_ARTIFACT_NAME := VPetCube
+BUILD_ARTIFACT_NAME := VPetCube_HAL
 BUILD_ARTIFACT_EXTENSION := elf
 BUILD_ARTIFACT_PREFIX :=
 BUILD_ARTIFACT := $(BUILD_ARTIFACT_PREFIX)$(BUILD_ARTIFACT_NAME)$(if $(BUILD_ARTIFACT_EXTENSION),.$(BUILD_ARTIFACT_EXTENSION),)
 
 # Add inputs and outputs from these tool invocations to the build variables 
 EXECUTABLES += \
-VPetCube.elf \
+VPetCube_HAL.elf \
 
 MAP_FILES += \
-VPetCube.map \
+VPetCube_HAL.map \
 
 SIZE_OUTPUT += \
 default.size.stdout \
 
 OBJDUMP_LIST += \
-VPetCube.list \
+VPetCube_HAL.list \
 
 OBJCOPY_HEX += \
-VPetCube.hex \
+VPetCube_HAL.hex \
 
 
 # All Target
 all: main-build
 
 # Main-build Target
-main-build: VPetCube.elf secondary-outputs
+main-build: VPetCube_HAL.elf secondary-outputs
 
 # Tool invocations
-VPetCube.elf VPetCube.map: $(OBJS) $(USER_OBJS) G:\git_workplace\VPetCube\STM32F405RGTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "VPetCube.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"G:\git_workplace\VPetCube\STM32F405RGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="VPetCube.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+VPetCube_HAL.elf VPetCube_HAL.map: $(OBJS) $(USER_OBJS) E:\projects\clawpetcube\STM32F405RGTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "VPetCube_HAL.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"E:\projects\clawpetcube\STM32F405RGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="VPetCube_HAL.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -144,19 +126,19 @@ default.size.stdout: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
-VPetCube.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "VPetCube.list"
+VPetCube_HAL.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "VPetCube_HAL.list"
 	@echo 'Finished building: $@'
 	@echo ' '
 
-VPetCube.hex: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objcopy  -O ihex $(EXECUTABLES) "VPetCube.hex"
+VPetCube_HAL.hex: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objcopy  -O ihex $(EXECUTABLES) "VPetCube_HAL.hex"
 	@echo 'Finished building: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) VPetCube.elf VPetCube.hex VPetCube.list VPetCube.map default.size.stdout
+	-$(RM) VPetCube_HAL.elf VPetCube_HAL.hex VPetCube_HAL.list VPetCube_HAL.map default.size.stdout
 	-@echo ' '
 
 secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST) $(OBJCOPY_HEX)

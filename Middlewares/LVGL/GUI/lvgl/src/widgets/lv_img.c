@@ -105,6 +105,7 @@ void lv_img_set_src(lv_obj_t * obj, const void * src)
 
     lv_img_header_t header;
     lv_res_t info_res =  lv_img_decoder_get_info(src, &header);
+    LV_UNUSED(info_res);
     
     
     /*Save the source*/

@@ -65,7 +65,7 @@ void lv_log_register_print_cb(lv_log_print_g_cb_t print_cb)
  */
 void _lv_log_add(lv_log_level_t level, const char * file, int line, const char * func, const char * format, ...)
 {
-    if(level >= _LV_LOG_LEVEL_NUM) return; /*Invalid level*/
+    if(level < 0 || level >= _LV_LOG_LEVEL_NUM) return; /*Invalid level*/
 
     static uint32_t last_log_time = 0;
 
@@ -73,23 +73,43 @@ void _lv_log_add(lv_log_level_t level, const char * file, int line, const char *
         va_list args;
         va_start(args, format);
 
+        const char * file_name = file ? file : "";
+        const char * func_name = func ? func : "";
+
         /*Use only the file name not the path*/
         size_t p;
-        for(p = strlen(file); p > 0; p--) {
-            if(file[p] == '/' || file[p] == '\\') {
+        for(p = strlen(file_name); p > 0; p--) {
+            if(file_name[p] == '/' || file_name[p] == '\\') {
                 p++;    /*Skip the slash*/
                 break;
             }
         }
 
         uint32_t t = lv_tick_get();
-        static const char * lvl_prefix[] = {"Trace", "Info", "Warn", "Error", "User"};
+        const char * level_name = "User";
+        switch(level) {
+            case LV_LOG_LEVEL_TRACE:
+                level_name = "Trace";
+                break;
+            case LV_LOG_LEVEL_INFO:
+                level_name = "Info";
+                break;
+            case LV_LOG_LEVEL_WARN:
+                level_name = "Warn";
+                break;
+            case LV_LOG_LEVEL_ERROR:
+                level_name = "Error";
+                break;
+            case LV_LOG_LEVEL_USER:
+                level_name = "User";
+                break;
+        }
 
 #if LV_LOG_PRINTF
         printf("[%s]\t(%" LV_PRId32 ".%03" LV_PRId32 ", +%" LV_PRId32 ")\t %s: ",
-               lvl_prefix[level], t / 1000, t % 1000, t - last_log_time, func);
+               level_name, t / 1000, t % 1000, t - last_log_time, func_name);
         vprintf(format, args);
-        printf(" \t(in %s line #%d)\n", &file[p], line);
+        printf(" \t(in %s line #%d)\n", &file_name[p], line);
 #else
         if(custom_print_cb) {
             char buf[512];
@@ -97,11 +117,11 @@ void _lv_log_add(lv_log_level_t level, const char * file, int line, const char *
             char msg[256];
             lv_vsnprintf(msg, sizeof(msg), format, args);
             lv_snprintf(buf, sizeof(buf), "[%s]\t(%" LV_PRId32 ".%03" LV_PRId32 ", +%" LV_PRId32 ")\t %s: %s \t(in %s line #%d)\n",
-                        lvl_prefix[level], t / 1000, t % 1000, t - last_log_time, func, msg, &file[p], line);
+                        level_name, t / 1000, t % 1000, t - last_log_time, func_name, msg, &file_name[p], line);
 #else
             lv_vaformat_t vaf = {format, &args};
             lv_snprintf(buf, sizeof(buf), "[%s]\t(%" LV_PRId32 ".%03" LV_PRId32 ", +%" LV_PRId32 ")\t %s: %pV \t(in %s line #%d)\n",
-                        lvl_prefix[level], t / 1000, t % 1000, t - last_log_time, func, (void *)&vaf, &file[p], line);
+                        level_name, t / 1000, t % 1000, t - last_log_time, func_name, (void *)&vaf, &file_name[p], line);
 #endif
             custom_print_cb(buf);
         }

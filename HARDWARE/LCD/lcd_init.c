@@ -7,7 +7,7 @@ void LCD_GPIO_Init(void)
 	GPIO_InitTypeDef GPIO_InitStructure;
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB | RCC_AHB1Periph_GPIOC, ENABLE);
 
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;		   // LCD_BLK
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1; // LCD_BLK,LCD_CS
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;	   // GPIO OUTPUT
 	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;	   // Push-pull output
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz; // 100MHz
@@ -21,7 +21,7 @@ void LCD_GPIO_Init(void)
 	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;		   // Pull-up
 	GPIO_Init(GPIOC, &GPIO_InitStructure);
 
-	GPIO_SetBits(GPIOB, GPIO_Pin_0);
+	GPIO_SetBits(GPIOB, GPIO_Pin_0 | GPIO_Pin_1);
 	GPIO_SetBits(GPIOC, GPIO_Pin_4 | GPIO_Pin_5);
 }
 
