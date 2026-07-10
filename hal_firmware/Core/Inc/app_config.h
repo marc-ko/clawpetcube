@@ -11,7 +11,7 @@
 #define APP_LCD_FLIP_BY_PRISM 1
 #define APP_LCD_USE_HORIZONTAL 0
 
-#define APP_ESP8266_RX_LEN 1500U
+#define APP_ESP8266_RX_LEN 2200U
 #define APP_USART6_RX_LEN 1500U
 #define APP_DEBUG_RX_LEN 200U
 
@@ -31,6 +31,14 @@
 
 #ifndef VPC_WIFI_PASSWORD
 #define VPC_WIFI_PASSWORD ""
+#endif
+
+#ifndef VPC_OPENCLAW_HOST
+#define VPC_OPENCLAW_HOST "claw.marcoko.com"
+#endif
+
+#ifndef VPC_OPENCLAW_TOKEN
+#define VPC_OPENCLAW_TOKEN ""
 #endif
 
 #endif

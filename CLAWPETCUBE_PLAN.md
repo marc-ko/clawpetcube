@@ -19,6 +19,18 @@ The screen should answer these questions without opening a browser:
 
 The device should still feel like a small companion object, but its primary value is operational monitoring.
 
+## Mascot Direction
+
+Use the simple blocky pixel mascot from the provided reference image:
+
+- salmon/orange rectangular body
+- black vertical eyes
+- short square side claws
+- short square legs
+- black background
+
+The mascot should stay deliberately minimal so it reads clearly on the 240x240 LCD and can be drawn cheaply with LVGL rectangles before committing to image assets. Keep it smaller and left-weighted so the right side can later hold a compact speech bubble or status message. It should act as a calm companion/status marker, not dominate the screen.
+
 ## Scope Decision
 
 ### Active Plan: Keep The Existing STM32 Cube
@@ -91,8 +103,8 @@ The active firmware path is:
 
 Current UI:
 
-- Local LVGL desktop shell.
-- Shows title, uptime clock, coin counter, status text, pet placeholder, and Hunger/Energy/XP bars.
+- Local LVGL clock/status shell.
+- Shows real HKT time from ESP8266/HKO sync, subtle date, compact status pill, and the chosen blocky pixel mascot.
 - Updates once per second.
 - Uses blocking SPI flush for stability.
 
@@ -129,8 +141,17 @@ The final screen should be a compact operations dashboard, not a toy-only pet sc
 
 Primary screen:
 
-- Brand/title: `OpenClaw`
-- Large status indicator:
+- Top-left HKT time, readable but not oversized.
+- Date shown subtly below the time.
+- Small status indicator:
+  - ONLINE: green
+  - SYNC/WIFI: blue
+  - STALE: yellow
+  - OFFLINE/UNSYNCED: red
+- Minimal blocky pixel mascot as the companion/status character.
+- Brand/title should be omitted or very small when space is tight.
+- Later OpenClaw dashboard status:
+  - Large status indicator:
   - ONLINE: green
   - DEGRADED: yellow
   - OFFLINE: red
@@ -140,9 +161,8 @@ Primary screen:
   - errors
   - success rate
   - average latency
-- Last update time
-- Last error message, if any
-- Small pet or face that changes expression based on status
+- Last update time or last error only when it matters; avoid routine sync noise on the small screen.
+- Mascot expression/color can change based on status.
 
 Secondary screen or cycling panel:
 

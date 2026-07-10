@@ -29,7 +29,7 @@ static lv_obj_t *status_pill;
 static lv_obj_t *status_pill_label;
 static lv_obj_t *time_label;
 static lv_obj_t *date_label;
-static lv_obj_t *summary_label;
+static lv_obj_t *mascot_obj;
 static lv_obj_t *footer_label;
 static volatile uint8_t rtc_time_valid;
 static volatile NetState net_state = NET_STATE_BOOTING;
@@ -41,6 +41,9 @@ static void create_clock_dashboard(void);
 static void update_clock_dashboard(uint32_t seconds);
 static void set_net_status(NetState state, const char *text);
 static void format_rtc_display(char *time_text, size_t time_len, char *date_text, size_t date_len);
+static lv_obj_t *create_pixel_mascot(lv_obj_t *parent, int16_t x, int16_t y);
+static void create_mascot_rect(lv_obj_t *parent, int16_t x, int16_t y, int16_t w, int16_t h, lv_color_t color);
+static void start_mascot_float(lv_obj_t *obj, int16_t base_y);
 static const char *net_state_text(NetState state);
 static lv_color_t net_state_color(NetState state);
 extern void lv_port_disp_init(void);
@@ -98,23 +101,19 @@ static void create_clock_dashboard(void)
     lv_obj_set_style_text_color(status_pill_label, lv_color_make(0x02, 0x08, 0x0a), 0);
 
     time_label = lv_label_create(screen);
-    lv_obj_set_pos(time_label, 8, 3);
-    lv_obj_set_size(time_label, 148, 38);
-    lv_obj_set_style_text_font(time_label, &lv_font_montserrat_32, 0);
+    lv_obj_set_pos(time_label, 9, 5);
+    lv_obj_set_size(time_label, 135, 31);
+    lv_obj_set_style_text_font(time_label, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(time_label, lv_color_make(0x63, 0xe6, 0xbe), 0);
 
     date_label = lv_label_create(screen);
-    lv_obj_set_pos(date_label, 10, 45);
-    lv_obj_set_size(date_label, 180, 20);
-    lv_obj_set_style_text_font(date_label, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(date_label, lv_color_make(0xf7, 0xd6, 0x7a), 0);
+    lv_obj_set_pos(date_label, 11, 36);
+    lv_obj_set_size(date_label, 155, 18);
+    lv_obj_set_style_text_font(date_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(date_label, lv_color_make(0x89, 0x95, 0xa3), 0);
 
-    summary_label = lv_label_create(screen);
-    lv_obj_set_pos(summary_label, 10, 96);
-    lv_obj_set_size(summary_label, 220, 22);
-    lv_obj_set_style_text_align(summary_label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(summary_label, lv_color_make(0xf7, 0xf9, 0xfb), 0);
-    lv_label_set_text(summary_label, "OpenClaw stats pending");
+    mascot_obj = create_pixel_mascot(screen, 18, 88);
+    start_mascot_float(mascot_obj, 88);
 
     footer_label = lv_label_create(screen);
     lv_obj_set_pos(footer_label, 10, 210);
@@ -122,6 +121,61 @@ static void create_clock_dashboard(void)
     lv_label_set_long_mode(footer_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(footer_label, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_style_text_color(footer_label, lv_color_make(0x7c, 0x88, 0x95), 0);
+}
+
+static lv_obj_t *create_pixel_mascot(lv_obj_t *parent, int16_t x, int16_t y)
+{
+    const int16_t u = 6;
+    lv_obj_t *sprite = lv_obj_create(parent);
+    lv_color_t body = lv_color_make(0xf2, 0x57, 0x45);
+    lv_color_t eye = lv_color_make(0x02, 0x03, 0x05);
+
+    lv_obj_set_pos(sprite, x, y);
+    lv_obj_set_size(sprite, 18 * u, 14 * u);
+    lv_obj_set_style_bg_opa(sprite, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sprite, 0, 0);
+    lv_obj_set_style_pad_all(sprite, 0, 0);
+
+    create_mascot_rect(sprite, 3 * u, 0 * u, 12 * u, 4 * u, body);
+    create_mascot_rect(sprite, 0 * u, 4 * u, 18 * u, 4 * u, body);
+    create_mascot_rect(sprite, 3 * u, 8 * u, 12 * u, 2 * u, body);
+
+    create_mascot_rect(sprite, 3 * u, 10 * u, 2 * u, 4 * u, body);
+    create_mascot_rect(sprite, 6 * u, 10 * u, 2 * u, 4 * u, body);
+    create_mascot_rect(sprite, 10 * u, 10 * u, 2 * u, 4 * u, body);
+    create_mascot_rect(sprite, 13 * u, 10 * u, 2 * u, 4 * u, body);
+
+    create_mascot_rect(sprite, 5 * u, 2 * u, 2 * u, 2 * u, eye);
+    create_mascot_rect(sprite, 11 * u, 2 * u, 2 * u, 2 * u, eye);
+
+    return sprite;
+}
+
+static void create_mascot_rect(lv_obj_t *parent, int16_t x, int16_t y, int16_t w, int16_t h, lv_color_t color)
+{
+    lv_obj_t *rect = lv_obj_create(parent);
+    lv_obj_set_pos(rect, x, y);
+    lv_obj_set_size(rect, w, h);
+    lv_obj_set_style_radius(rect, 0, 0);
+    lv_obj_set_style_border_width(rect, 0, 0);
+    lv_obj_set_style_bg_color(rect, color, 0);
+    lv_obj_set_style_bg_opa(rect, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_all(rect, 0, 0);
+}
+
+static void start_mascot_float(lv_obj_t *obj, int16_t base_y)
+{
+    lv_anim_t anim;
+
+    lv_anim_init(&anim);
+    lv_anim_set_var(&anim, obj);
+    lv_anim_set_exec_cb(&anim, (lv_anim_exec_xcb_t)lv_obj_set_y);
+    lv_anim_set_values(&anim, base_y, base_y - 7);
+    lv_anim_set_time(&anim, 850);
+    lv_anim_set_playback_time(&anim, 850);
+    lv_anim_set_repeat_count(&anim, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&anim, lv_anim_path_ease_in_out);
+    lv_anim_start(&anim);
 }
 
 static void update_clock_dashboard(uint32_t seconds)
@@ -212,7 +266,7 @@ static void format_rtc_display(char *time_text, size_t time_len, char *date_text
 
     snprintf(time_text, time_len, "%02u:%02u:%02u",
              time.Hours, time.Minutes, time.Seconds);
-    snprintf(date_text, date_len, "20%02u-%02u-%02u HKT",
+    snprintf(date_text, date_len, "20%02u-%02u-%02u",
              date.Year, date.Month, date.Date);
 }
 
