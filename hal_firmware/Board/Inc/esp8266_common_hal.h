@@ -35,6 +35,26 @@ typedef struct {
     ActionEnum action;
 } UserInfoStruct;
 
+typedef struct {
+    u8 ok;
+    u8 error_code;
+    char status[12];
+} OpenClawHealthStruct;
+
+typedef struct {
+    u8 ok;
+    u8 error_code;
+    u8 gateway_ok;
+    u8 process_count;
+    u8 cron_total;
+    u8 cron_ok;
+    u8 cron_failed;
+    u8 disk_percent;
+    u8 memory_percent;
+    char uptime[24];
+    char timestamp[28];
+} OpenClawStatusStruct;
+
 void esp8266_at_response(u8 mode);
 u8 *esp8266_check_cmd(u8 *str);
 u8 esp8266_send_cmd(u8 *cmd, u8 *ack, u16 waittime);
@@ -46,5 +66,7 @@ void esp8266_sta_connect(void);
 TimeStruct esp8266_gettime(void);
 WeatherStruct ESP8266_GetWeather(char *city);
 UserInfoStruct ESP8266_GetUserInfo(char *username);
+OpenClawHealthStruct ESP8266_GetOpenClawHealth(void);
+OpenClawStatusStruct ESP8266_GetOpenClawStatus(void);
 
 #endif

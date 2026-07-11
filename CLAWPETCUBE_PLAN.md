@@ -182,10 +182,20 @@ Idle behavior:
 
 OpenClaw should expose a lightweight JSON endpoint, either directly or through a sidecar exporter.
 
-Proposed endpoint:
+Important ESP8266 constraint:
+
+- The current ESP8266 AT firmware rejects direct SSL to the private OpenClaw host.
+- The normal private OpenClaw HTTP endpoint redirects to HTTPS through Cloudflare.
+- Therefore direct polling from the STM32/ESP8266 uses a cube-specific plain HTTP Cloudflare endpoint.
+- Firmware has config hooks for this endpoint: `VPC_OPENCLAW_HTTP_HOST` and `VPC_OPENCLAW_HTTP_PORT`.
+- Current verified endpoint is configured only in ignored local config.
+- Hardware COM6 verification passed with `OpenClaw health: alive` and `OpenClaw status: gw=1 proc=3 cron=8/13 disk=70 mem=41`.
+
+Current endpoint:
 
 ```http
-GET /openclaw/stats
+GET /health
+GET /status
 ```
 
 Proposed JSON:

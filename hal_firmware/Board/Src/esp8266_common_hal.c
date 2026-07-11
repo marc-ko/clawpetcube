@@ -8,12 +8,23 @@ static const char *wifista_ssid = VPC_WIFI_SSID;
 static const char *wifista_password = VPC_WIFI_PASSWORD;
 static const char *time_host = "www.hko.gov.hk";
 static const char *time_port = "80";
+static const char *openclaw_host = VPC_OPENCLAW_HOST;
+static const char *openclaw_http_host = VPC_OPENCLAW_HTTP_HOST;
+static const char *openclaw_http_port = VPC_OPENCLAW_HTTP_PORT;
+static const char *openclaw_token = VPC_OPENCLAW_TOKEN;
+static uint8_t openclaw_tls_disabled;
 
 static uint8_t parse_http_date_hkt(const char *rx, TimeStruct *out);
 static uint8_t parse_month(const char *month);
 static uint8_t parse_weekday(const char *weekday);
 static uint8_t days_in_month(uint16_t year, uint8_t month);
 static uint8_t is_leap_year(uint16_t year);
+static uint8_t esp8266_https_get(const char *path, const char *auth_token, const char *ack, uint16_t waittime);
+static uint8_t esp8266_http_get_host(const char *host, const char *port, const char *path, const char *auth_token, const char *ack, uint16_t waittime);
+static void esp8266_try_optional_cmd(const char *cmd);
+static uint8_t parse_uint_after(const char *base, const char *key, uint8_t *out);
+static uint8_t parse_percent_after(const char *base, const char *section, uint8_t *out);
+static void parse_string_after(const char *base, const char *key, char *out, size_t out_len);
 
 void esp8266_at_response(u8 mode)
 {
@@ -71,8 +82,11 @@ u8 esp8266_send_data(u8 *data, u8 *ack, u16 waittime)
 
     while (waittime-- > 0U) {
         HAL_Delay(10);
-        if ((USART2_RX_STA & 0x8000U) != 0U && esp8266_check_cmd(ack) != NULL) {
-            return 0;
+        if ((USART2_RX_STA & 0x8000U) != 0U) {
+            if (esp8266_check_cmd(ack) != NULL) {
+                return 0;
+            }
+            USART2_RX_STA = 0;
         }
     }
     return 1;
@@ -116,6 +130,7 @@ void esp8266_sta_connect(void)
         printf("ESP8266 WiFi join retry\r\n");
     }
     printf("ESP8266 WiFi connected\r\n");
+    esp8266_send_cmd((u8 *)"AT+CIFSR", (u8 *)"STAIP", 100);
 }
 
 TimeStruct esp8266_gettime(void)
@@ -130,6 +145,7 @@ TimeStruct esp8266_gettime(void)
 
     esp8266_send_cmd((u8 *)"AT+CIPMODE=0", (u8 *)"OK", 100);
     esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+    HAL_Delay(300);
 
     snprintf(command, sizeof(command), "AT+CIPSTART=\"TCP\",\"%s\",%s", time_host, time_port);
     if (esp8266_send_cmd((u8 *)command, (u8 *)"CONNECT", 500)) {
@@ -289,4 +305,302 @@ UserInfoStruct ESP8266_GetUserInfo(char *username)
     user.action = ACTION_NONE;
     printf("User API pending; using local defaults for %s\r\n", user.username);
     return user;
+}
+
+OpenClawHealthStruct ESP8266_GetOpenClawHealth(void)
+{
+    OpenClawHealthStruct health = {0};
+    const char *rx;
+
+    if (openclaw_http_host[0] != '\0') {
+        health.error_code = esp8266_http_get_host(openclaw_http_host, openclaw_http_port, "/health", NULL, "\"alive\"", 300);
+    } else {
+        health.error_code = esp8266_https_get("/health", NULL, "\"alive\"", 300);
+    }
+
+    if (health.error_code != 0U) {
+        strncpy(health.status,
+                health.error_code == 2U ? "tls-no" : (health.error_code == 3U ? "proxy" : "offline"),
+                sizeof(health.status) - 1U);
+        if (health.error_code == 2U) {
+            printf("OpenClaw health needs HTTP proxy\r\n");
+        } else if (health.error_code == 3U) {
+            printf("OpenClaw health proxy TCP failed\r\n");
+        } else {
+            printf("OpenClaw health failed\r\n");
+        }
+        return health;
+    }
+
+    rx = (const char *)USART2_RX_BUF;
+    health.ok = (strstr(rx, "\"ok\":true") != NULL || strstr(rx, "\"ok\": true") != NULL) ? 1U : 0U;
+    parse_string_after(rx, "\"status\"", health.status, sizeof(health.status));
+    if (health.status[0] == '\0') {
+        strncpy(health.status, health.ok ? "alive" : "unknown", sizeof(health.status) - 1U);
+    }
+    printf("OpenClaw health: %s\r\n", health.status);
+    return health;
+}
+
+OpenClawStatusStruct ESP8266_GetOpenClawStatus(void)
+{
+    OpenClawStatusStruct status = {0};
+    const char *rx;
+    const char *gateway;
+    const char *process;
+    const char *cron;
+
+    if (openclaw_token[0] == '\0') {
+        printf("OpenClaw token missing\r\n");
+        return status;
+    }
+
+    if (openclaw_http_host[0] != '\0') {
+        status.error_code = esp8266_http_get_host(openclaw_http_host, openclaw_http_port, "/status", NULL, "\"cron_jobs\"", 4500);
+    } else {
+        status.error_code = esp8266_https_get("/status", openclaw_token, "\"cron_jobs\"", 4500);
+    }
+
+    if (status.error_code != 0U) {
+        if (status.error_code == 2U) {
+            printf("OpenClaw status needs HTTP proxy\r\n");
+        } else if (status.error_code == 3U) {
+            printf("OpenClaw status proxy TCP failed\r\n");
+        } else {
+            printf("OpenClaw status failed\r\n");
+        }
+        return status;
+    }
+
+    rx = (const char *)USART2_RX_BUF;
+    gateway = strstr(rx, "\"gateway\"");
+    process = strstr(rx, "\"process\"");
+    cron = strstr(rx, "\"cron_jobs\"");
+
+    status.gateway_ok = (gateway != NULL &&
+                         (strstr(gateway, "\"ok\":true") != NULL ||
+                          strstr(gateway, "\"ok\": true") != NULL)) ? 1U : 0U;
+    if (process != NULL) {
+        parse_uint_after(process, "\"count\"", &status.process_count);
+    }
+    if (cron != NULL) {
+        parse_uint_after(cron, "\"total\"", &status.cron_total);
+        parse_uint_after(cron, "\"ok\"", &status.cron_ok);
+        parse_uint_after(cron, "\"failed\"", &status.cron_failed);
+    }
+    parse_percent_after(rx, "\"disk\"", &status.disk_percent);
+    parse_percent_after(rx, "\"memory\"", &status.memory_percent);
+    parse_string_after(rx, "\"uptime\"", status.uptime, sizeof(status.uptime));
+    parse_string_after(rx, "\"timestamp\"", status.timestamp, sizeof(status.timestamp));
+
+    status.ok = status.gateway_ok;
+    printf("OpenClaw status: gw=%u proc=%u cron=%u/%u disk=%u mem=%u\r\n",
+           status.gateway_ok, status.process_count, status.cron_ok,
+           status.cron_total, status.disk_percent, status.memory_percent);
+    return status;
+}
+
+static uint8_t esp8266_https_get(const char *path, const char *auth_token, const char *ack, uint16_t waittime)
+{
+    char command[96];
+    char sni_command[96];
+    char request[512];
+    int request_len;
+
+    if (openclaw_tls_disabled != 0U) {
+        return 2U;
+    }
+
+    esp8266_send_cmd((u8 *)"AT+CIPMODE=0", (u8 *)"OK", 100);
+    esp8266_send_cmd((u8 *)"AT+CIPMUX=0", (u8 *)"OK", 100);
+    esp8266_try_optional_cmd("AT+CIPSSLSIZE=4096");
+    esp8266_try_optional_cmd("AT+CIPSSLCCONF=0");
+    esp8266_try_optional_cmd("AT+CIPSSLCCONF=0,0,0");
+    snprintf(sni_command, sizeof(sni_command), "AT+CIPSSLCSNI=\"%s\"", openclaw_host);
+    esp8266_try_optional_cmd(sni_command);
+    esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+    HAL_Delay(300);
+
+    snprintf(command, sizeof(command), "AT+CIPSTART=\"SSL\",\"%s\",443", openclaw_host);
+    if (esp8266_send_cmd((u8 *)command, (u8 *)"CONNECT", 800)) {
+        openclaw_tls_disabled = 1U;
+        return 2U;
+    }
+
+    if (auth_token != NULL && auth_token[0] != '\0') {
+        request_len = snprintf(request, sizeof(request),
+                               "GET %s HTTP/1.1\r\n"
+                               "Host: %s\r\n"
+                               "Authorization: Bearer %s\r\n"
+                               "Connection: close\r\n"
+                               "\r\n",
+                               path, openclaw_host, auth_token);
+    } else {
+        request_len = snprintf(request, sizeof(request),
+                               "GET %s HTTP/1.1\r\n"
+                               "Host: %s\r\n"
+                               "Connection: close\r\n"
+                               "\r\n",
+                               path, openclaw_host);
+    }
+
+    if (request_len <= 0 || request_len >= (int)sizeof(request)) {
+        esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+        return 1U;
+    }
+
+    snprintf(command, sizeof(command), "AT+CIPSEND=%u", (unsigned int)request_len);
+    if (esp8266_send_cmd((u8 *)command, (u8 *)">", 300)) {
+        esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+        return 1U;
+    }
+
+    if (esp8266_send_data((u8 *)request, (u8 *)ack, waittime)) {
+        esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+        return 1U;
+    }
+
+    return 0U;
+}
+
+static void esp8266_try_optional_cmd(const char *cmd)
+{
+    USART2_RX_STA = 0;
+    memset(USART2_RX_BUF, 0, USART2_MAX_RECV_LEN);
+    printf("ESP8266 opt: %s\r\n", cmd);
+    u2_printf("%s\r\n", (char *)cmd);
+
+    for (uint16_t wait = 0; wait < 80U; wait++) {
+        HAL_Delay(10);
+        if ((USART2_RX_STA & 0x8000U) != 0U) {
+            USART2_RX_BUF[USART2_RX_STA & 0x7FFFU] = 0;
+            if (strstr((const char *)USART2_RX_BUF, "OK") != NULL) {
+                return;
+            }
+            if (strstr((const char *)USART2_RX_BUF, "ERROR") != NULL) {
+                printf("ESP8266 opt unsupported\r\n");
+                return;
+            }
+            USART2_RX_STA = 0;
+        }
+    }
+}
+
+static uint8_t esp8266_http_get_host(const char *host, const char *port, const char *path, const char *auth_token, const char *ack, uint16_t waittime)
+{
+    char command[96];
+    char request[512];
+    int request_len;
+
+    esp8266_send_cmd((u8 *)"AT+CIPMODE=0", (u8 *)"OK", 100);
+    esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+    HAL_Delay(300);
+
+    snprintf(command, sizeof(command), "AT+CIPSTART=\"TCP\",\"%s\",%s", host, port);
+    if (esp8266_send_cmd((u8 *)command, (u8 *)"CONNECT", 500)) {
+        return 3U;
+    }
+
+    if (auth_token != NULL && auth_token[0] != '\0') {
+        request_len = snprintf(request, sizeof(request),
+                               "GET %s HTTP/1.1\r\n"
+                               "Host: %s\r\n"
+                               "Authorization: Bearer %s\r\n"
+                               "Connection: close\r\n"
+                               "\r\n",
+                               path, host, auth_token);
+    } else {
+        request_len = snprintf(request, sizeof(request),
+                               "GET %s HTTP/1.1\r\n"
+                               "Host: %s\r\n"
+                               "Connection: close\r\n"
+                               "\r\n",
+                               path, host);
+    }
+
+    if (request_len <= 0 || request_len >= (int)sizeof(request)) {
+        esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+        return 1U;
+    }
+
+    snprintf(command, sizeof(command), "AT+CIPSEND=%u", (unsigned int)request_len);
+    if (esp8266_send_cmd((u8 *)command, (u8 *)">", 300)) {
+        esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+        return 1U;
+    }
+
+    if (esp8266_send_data((u8 *)request, (u8 *)ack, waittime)) {
+        esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+        return 1U;
+    }
+
+    return 0U;
+}
+
+static uint8_t parse_uint_after(const char *base, const char *key, uint8_t *out)
+{
+    const char *p = strstr(base, key);
+    unsigned int value = 0;
+
+    if (p == NULL || out == NULL) {
+        return 0U;
+    }
+
+    p = strchr(p, ':');
+    if (p == NULL || sscanf(p + 1, " %u", &value) != 1) {
+        return 0U;
+    }
+    if (value > 255U) {
+        value = 255U;
+    }
+    *out = (uint8_t)value;
+    return 1U;
+}
+
+static uint8_t parse_percent_after(const char *base, const char *section, uint8_t *out)
+{
+    const char *p = strstr(base, section);
+    unsigned int whole = 0;
+
+    if (p == NULL || out == NULL) {
+        return 0U;
+    }
+
+    p = strstr(p, "\"percent\"");
+    if (p == NULL || (p = strchr(p, ':')) == NULL || sscanf(p + 1, " %u", &whole) != 1) {
+        return 0U;
+    }
+    if (whole > 100U) {
+        whole = 100U;
+    }
+    *out = (uint8_t)whole;
+    return 1U;
+}
+
+static void parse_string_after(const char *base, const char *key, char *out, size_t out_len)
+{
+    const char *p = strstr(base, key);
+    size_t i = 0;
+
+    if (out == NULL || out_len == 0U) {
+        return;
+    }
+    out[0] = '\0';
+    if (p == NULL) {
+        return;
+    }
+    p = strchr(p, ':');
+    if (p == NULL) {
+        return;
+    }
+    p = strchr(p, '"');
+    if (p == NULL) {
+        return;
+    }
+    p++;
+
+    while (*p != '\0' && *p != '"' && i < out_len - 1U) {
+        out[i++] = *p++;
+    }
+    out[i] = '\0';
 }

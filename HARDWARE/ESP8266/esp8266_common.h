@@ -2,8 +2,8 @@
 #define __ESP8266_COMMON_H__
 #include "sys.h"
 
-#define WIFI_SSID "HKBN-8266"
-#define WIFI_PASSWORD "(marcoko)"
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
 
 #define esp8266_PROCESS_RETURN_DATA 1
 // Configuration parameters

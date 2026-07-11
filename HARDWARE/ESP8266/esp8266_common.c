@@ -16,7 +16,7 @@ const u8 *NTP_ip = "www.beijing-time.org";
 // NTP server port
 const u8 *NTP_portnum = "80";
 
-const u8 *vpet_server_ip = "elec3300.marcoko.com";
+const u8 *vpet_server_ip = "example.invalid";
 const u8 *vpet_port = "80";
 const u8 *username = "billy";
 
@@ -511,7 +511,7 @@ UserInfoStruct ESP8266_GetUserInfo(char *username)
     //================Current Backend================//
     sprintf((char *)command,
             "GET /api/getuserstatus?username=%s HTTP/1.1\r\n"
-            "Host: elec3300.marcoko.com\r\n"
+            "Host: example.invalid\r\n"
             "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n"
             "Accept: application/json\r\n"
             "Accept-Language: en-US,en;q=0.9\r\n"
