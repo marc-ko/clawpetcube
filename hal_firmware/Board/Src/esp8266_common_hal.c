@@ -22,6 +22,8 @@ static uint8_t is_leap_year(uint16_t year);
 static uint8_t esp8266_https_get(const char *path, const char *auth_token, const char *ack, uint16_t waittime);
 static uint8_t esp8266_http_get_host(const char *host, const char *port, const char *path, const char *auth_token, const char *ack, uint16_t waittime);
 static void esp8266_try_optional_cmd(const char *cmd);
+static void esp8266_log_cmd(const char *cmd);
+static void esp8266_log_ack_miss(const char *rx);
 static uint8_t parse_uint_after(const char *base, const char *key, uint8_t *out);
 static uint8_t parse_percent_after(const char *base, const char *section, uint8_t *out);
 static void parse_string_after(const char *base, const char *key, char *out, size_t out_len);
@@ -50,7 +52,7 @@ u8 esp8266_send_cmd(u8 *cmd, u8 *ack, u16 waittime)
 {
     USART2_RX_STA = 0;
     memset(USART2_RX_BUF, 0, USART2_MAX_RECV_LEN);
-    printf("ESP8266 cmd: %s\r\n", cmd);
+    esp8266_log_cmd((const char *)cmd);
     u2_printf("%s\r\n", cmd);
 
     if (ack == NULL || waittime == 0U) {
@@ -63,7 +65,7 @@ u8 esp8266_send_cmd(u8 *cmd, u8 *ack, u16 waittime)
             if (esp8266_check_cmd(ack) != NULL) {
                 return 0;
             }
-            printf("ESP8266 ack miss: %s\r\n", USART2_RX_BUF);
+            esp8266_log_ack_miss((const char *)USART2_RX_BUF);
             USART2_RX_STA = 0;
         }
     }
@@ -400,6 +402,38 @@ OpenClawStatusStruct ESP8266_GetOpenClawStatus(void)
     return status;
 }
 
+OpenClawMessageStruct ESP8266_GetOpenClawMessage(void)
+{
+    OpenClawMessageStruct msg = {0};
+    const char *rx;
+
+    if (openclaw_http_host[0] != '\0') {
+        msg.error_code = esp8266_http_get_host(openclaw_http_host, openclaw_http_port, "/message", NULL, "\"timestamp\"", 500);
+    } else {
+        msg.error_code = esp8266_https_get("/message", NULL, "\"timestamp\"", 500);
+    }
+
+    if (msg.error_code != 0U) {
+        if (msg.error_code == 2U) {
+            printf("OpenClaw message needs HTTP proxy\r\n");
+        } else if (msg.error_code == 3U) {
+            printf("OpenClaw message proxy TCP failed\r\n");
+        } else {
+            printf("OpenClaw message failed\r\n");
+        }
+        return msg;
+    }
+
+    rx = (const char *)USART2_RX_BUF;
+    parse_string_after(rx, "\"message\"", msg.message, sizeof(msg.message));
+    parse_string_after(rx, "\"from\"", msg.from, sizeof(msg.from));
+    parse_string_after(rx, "\"timestamp\"", msg.timestamp, sizeof(msg.timestamp));
+
+    msg.ok = (msg.timestamp[0] != '\0' && msg.message[0] != '\0') ? 1U : 0U;
+    printf("OpenClaw message: %s\r\n", msg.ok ? "received" : "empty");
+    return msg;
+}
+
 static uint8_t esp8266_https_get(const char *path, const char *auth_token, const char *ack, uint16_t waittime)
 {
     char command[96];
@@ -467,7 +501,7 @@ static void esp8266_try_optional_cmd(const char *cmd)
 {
     USART2_RX_STA = 0;
     memset(USART2_RX_BUF, 0, USART2_MAX_RECV_LEN);
-    printf("ESP8266 opt: %s\r\n", cmd);
+    esp8266_log_cmd(cmd);
     u2_printf("%s\r\n", (char *)cmd);
 
     for (uint16_t wait = 0; wait < 80U; wait++) {
@@ -483,6 +517,36 @@ static void esp8266_try_optional_cmd(const char *cmd)
             }
             USART2_RX_STA = 0;
         }
+    }
+}
+
+static void esp8266_log_cmd(const char *cmd)
+{
+    if (cmd == NULL) {
+        return;
+    }
+
+    if (strncmp(cmd, "AT+CWJAP", 8) == 0) {
+        printf("ESP8266 cmd: AT+CWJAP=<local>\r\n");
+    } else if (strncmp(cmd, "AT+CIPSTART", 11) == 0) {
+        printf("ESP8266 cmd: AT+CIPSTART=<configured>\r\n");
+    } else if (strncmp(cmd, "AT+CIPSSLCSNI", 13) == 0) {
+        printf("ESP8266 cmd: AT+CIPSSLCSNI=<configured>\r\n");
+    } else {
+        printf("ESP8266 cmd: %s\r\n", cmd);
+    }
+}
+
+static void esp8266_log_ack_miss(const char *rx)
+{
+    if (rx == NULL) {
+        printf("ESP8266 ack miss\r\n");
+    } else if (strstr(rx, "ERROR") != NULL) {
+        printf("ESP8266 ack miss: ERROR\r\n");
+    } else if (strstr(rx, "CLOSED") != NULL) {
+        printf("ESP8266 ack miss: CLOSED\r\n");
+    } else {
+        printf("ESP8266 ack miss\r\n");
     }
 }
 

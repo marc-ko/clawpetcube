@@ -29,7 +29,7 @@ Use the simple blocky pixel mascot from the provided reference image:
 - short square legs
 - black background
 
-The mascot should stay deliberately minimal so it reads clearly on the 240x240 LCD and can be drawn cheaply with LVGL rectangles before committing to image assets. Keep it smaller and left-weighted so the right side can later hold a compact speech bubble or status message. It should act as a calm companion/status marker, not dominate the screen.
+The mascot should stay deliberately minimal so it reads clearly on the 240x240 LCD and can be drawn cheaply with LVGL rectangles before committing to image assets. Keep it smaller and left-weighted so the right side can hold a compact speech bubble. Operational status belongs below the mascot/bubble area, not inside the bubble.
 
 ## Scope Decision
 
@@ -78,14 +78,12 @@ Known good:
 - LVGL draws and updates on-screen.
 - FreeRTOS task loop is alive.
 - TIM3 now drives LVGL tick correctly.
-
-Temporarily disabled:
-
-- ESP8266 monitor/probe task, because the module currently does not respond to `AT` and was creating noisy serial logs.
+- ESP8266 joins WiFi and fetches HKO time over HTTP.
+- OpenClaw health/status fetch works through the configured cube HTTP endpoint.
+- Serial logs mask local WiFi/API host commands instead of printing configured secrets or hostnames.
 
 Still to validate:
 
-- ESP8266 UART wiring, power, boot mode, baud rate, and AT firmware.
 - SDIO/FatFs mount.
 - MPU6050 ID and interrupt.
 - USART6 touch/input events.
@@ -103,8 +101,15 @@ The active firmware path is:
 
 Current UI:
 
-- Local LVGL clock/status shell.
-- Shows real HKT time from ESP8266/HKO sync, subtle date, compact status pill, and the chosen blocky pixel mascot.
+- Local LVGL OpenClaw dashboard.
+- Shows real HKT time from ESP8266/HKO sync, subtle date, chosen blocky pixel mascot, and a right-side speech bubble.
+- The speech bubble normally shows the latest pushed cube message. Serious time/network/OpenClaw errors override it.
+- Pushed cube messages are keyed by the response `timestamp` and stay visible only while that server timestamp is less than about 45 minutes old. Expired messages hide the speech bubble instead of leaving stale text on-screen.
+- Top-right alert pill is hidden during normal operation; it appears only for time/network stale/offline or OpenClaw health/fetch/gateway errors.
+- Three compact cards sit below the mascot/bubble area:
+  - `CRON`: ok/total count, blue normally and amber when cron has failures
+  - `HEALTH`: current health text, green when `alive` and red on health/gateway failure
+  - bottom-right detail/error card: rotates `PROC`, `DISK`, and `MEM` every 2 seconds during normal operation; disk/mem values include `%`; switches to `ERROR` on gateway/fetch/health failures
 - Updates once per second.
 - Uses blocking SPI flush for stability.
 
@@ -196,7 +201,21 @@ Current endpoint:
 ```http
 GET /health
 GET /status
+GET /message
 ```
+
+`/message` returns the current speech-bubble message:
+
+```json
+{
+  "message": "short text for the cube",
+  "from": "Pomu",
+  "id": 2,
+  "timestamp": "2026-07-12T13:36:00+08:00"
+}
+```
+
+The firmware ignores `id` for display lifetime and uses `timestamp` as the message identity.
 
 Proposed JSON:
 
@@ -251,7 +270,7 @@ Suggested task split:
 - Persistence task:
   - optional SD/FatFs cache and logs
 
-For now, only the UI task should remain active until the display path is stable.
+The UI task and ESP8266 monitor task are active. Keep other peripheral tasks off until the live dashboard has run cleanly on hardware.
 
 ## UI Implementation Plan
 
@@ -264,14 +283,14 @@ Phase 1: Stable Local LVGL Shell
 
 Phase 2: OpenClaw Dashboard Layout
 
-- Replace placeholder pet/stat labels with dashboard widgets:
-  - status pill
-  - sessions/files/errors
-  - success rate
-  - latency
-  - last error
-- Use static/mock data first.
-- Keep all UI code local until the layout is stable.
+- Live dashboard cards are now implemented locally in `app_tasks.c`.
+- Current widgets:
+  - top-left HKT time/date
+  - top-right network pill
+  - left-side animated pixel mascot
+  - right-side speech bubble
+  - bottom compact cards for cron, health, and recent error
+- Keep all UI code local until the layout is stable on the physical LCD.
 
 Phase 3: Generated UI Integration
 
@@ -282,10 +301,10 @@ Phase 3: Generated UI Integration
 
 Phase 4: Live Data
 
-- Re-enable or rebuild ESP8266 communication.
-- Add stats polling.
-- Feed parsed stats into the UI task through a queue or shared struct.
-- Add offline/stale state handling.
+- ESP8266 WiFi, HKO time sync, OpenClaw health, OpenClaw status, and cube message polling are active.
+- Parsed status is fed into the UI through shared text/state fields guarded by FreeRTOS critical sections.
+- Parsed cube messages feed the right-side speech bubble unless a serious alert is active.
+- Offline/stale state handling exists at a basic level; refine it after long-run testing.
 
 Phase 5: Polish
 
@@ -333,18 +352,15 @@ Already passed:
 
 Next:
 
-- Confirm current desktop shell runs for 10 minutes.
-- Check whether ESP8266 is powered and booting.
-- Verify ESP8266 baud rate and AT firmware.
-- Confirm USART2 RX/TX wiring.
-- Confirm RTC behavior.
+- Visually confirm the live OpenClaw bubble/status cards and pushed message behavior on the LCD after the latest flash.
+- Run the dashboard for 10-30 minutes and watch for stale status or display artifacts.
 - Confirm SDIO card detect/mount.
 - Confirm MPU6050 ID.
 - Confirm USART6 input events.
 
 ## Known Risks
 
-- ESP8266 may be miswired, unpowered, in wrong boot mode, wrong baud, or missing AT firmware.
+- ESP8266 direct HTTPS to Cloudflare is not viable on this AT firmware; the cube-specific plain HTTP endpoint is the current transport.
 - Blocking SPI flush may be too slow for complex UI, but it is acceptable for bring-up.
 - GUI Guider generated code has legacy dependencies that can cause link errors.
 - CubeIDE may regenerate `Release/` makefiles or object lists.
@@ -360,14 +376,15 @@ Next:
 
 ## Immediate Next Step
 
-Verify the current local desktop shell on hardware.
+Visually confirm the flashed live dashboard on hardware.
 
 Expected:
 
-- title: `ClawPetCube`
-- clock increments once per second
-- coin counter increments
-- pet face/body changes
-- stat bars move
+- HKT time/date in the top-left.
+- Right-side area is a speech bubble, not a status card.
+- Bottom compact cards show `CRON`, `HEALTH`, and a rotating detail/error card.
+- The bottom-right card cycles `PROC`, `DISK`, and `MEM` during normal operation, then switches to `ERROR` only on failures. Cron stays only in the `CRON` card.
+- Top-right pill appears only for stale/offline time/network, health not `alive`, or a fetch/gateway error. Cron status stays in the `CRON` card.
+- Mascot floats on the left without colliding with the cards.
 
-If stable, the next development task is to convert this placeholder shell into the first OpenClaw dashboard screen with mock data.
+If stable, the next development task is a small design pass for the speech copy and then wiring more OpenClaw fields only if they fit cleanly.

@@ -55,6 +55,14 @@ typedef struct {
     char timestamp[28];
 } OpenClawStatusStruct;
 
+typedef struct {
+    u8 ok;
+    u8 error_code;
+    char message[96];
+    char from[24];
+    char timestamp[32];
+} OpenClawMessageStruct;
+
 void esp8266_at_response(u8 mode);
 u8 *esp8266_check_cmd(u8 *str);
 u8 esp8266_send_cmd(u8 *cmd, u8 *ack, u16 waittime);
@@ -68,5 +76,6 @@ WeatherStruct ESP8266_GetWeather(char *city);
 UserInfoStruct ESP8266_GetUserInfo(char *username);
 OpenClawHealthStruct ESP8266_GetOpenClawHealth(void);
 OpenClawStatusStruct ESP8266_GetOpenClawStatus(void);
+OpenClawMessageStruct ESP8266_GetOpenClawMessage(void);
 
 #endif
