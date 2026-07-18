@@ -22,6 +22,11 @@ static uint8_t is_leap_year(uint16_t year);
 static uint8_t esp8266_https_get(const char *path, const char *auth_token, const char *ack, uint16_t waittime);
 static uint8_t esp8266_http_get_host(const char *host, const char *port, const char *path, const char *auth_token, const char *ack, uint16_t waittime);
 static void esp8266_try_optional_cmd(const char *cmd);
+static void esp8266_recover_at_mode(void);
+static void esp8266_soft_reset(void);
+static void esp8266_close_socket(uint16_t settle_ms);
+static uint8_t esp8266_start_tcp(const char *host, const char *port);
+static void esp8266_log_link_status(void);
 static void esp8266_log_cmd(const char *cmd);
 static void esp8266_log_ack_miss(const char *rx);
 static uint8_t parse_uint_after(const char *base, const char *key, uint8_t *out);
@@ -113,13 +118,26 @@ void esp8266_ctr_gpio_init(void)
 void esp8266_sta_connect(void)
 {
     char command[160];
+    uint8_t busy_count = 0U;
 
-    while (esp8266_send_cmd((u8 *)"AT", (u8 *)"OK", 20)) {
-        printf("No ESP8266-12F detected\r\n");
-        HAL_Delay(800);
+    esp8266_recover_at_mode();
+
+    while (esp8266_send_cmd((u8 *)"AT", (u8 *)"OK", 100)) {
+        if (strstr((const char *)USART2_RX_BUF, "busy") != NULL) {
+            busy_count++;
+            printf("ESP8266 busy, waiting\r\n");
+            if ((busy_count % 3U) == 0U) {
+                esp8266_recover_at_mode();
+                esp8266_soft_reset();
+            }
+            HAL_Delay(2500);
+        } else {
+            printf("No ESP8266-12F detected\r\n");
+            HAL_Delay(800);
+        }
     }
 
-    esp8266_send_cmd((u8 *)"ATE1", (u8 *)"OK", 20);
+    esp8266_send_cmd((u8 *)"ATE0", (u8 *)"OK", 50);
     esp8266_send_cmd((u8 *)"AT+CWMODE=1", (u8 *)"OK", 50);
 
     if (wifista_ssid[0] == '\0') {
@@ -520,6 +538,54 @@ static void esp8266_try_optional_cmd(const char *cmd)
     }
 }
 
+static void esp8266_recover_at_mode(void)
+{
+    USART2_RX_STA = 0;
+    memset(USART2_RX_BUF, 0, USART2_MAX_RECV_LEN);
+    printf("ESP8266 AT recovery\r\n");
+    HAL_Delay(1000);
+    HAL_UART_Transmit(&huart2, (uint8_t *)"+++", 3, 100U);
+    HAL_Delay(1200);
+    HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", 2, 100U);
+    HAL_Delay(500);
+    USART2_RX_STA = 0;
+    memset(USART2_RX_BUF, 0, USART2_MAX_RECV_LEN);
+}
+
+static void esp8266_soft_reset(void)
+{
+    printf("ESP8266 soft reset\r\n");
+    (void)esp8266_send_cmd((u8 *)"AT+RST", (u8 *)"ready", 800);
+    HAL_Delay(2500);
+    USART2_RX_STA = 0;
+    memset(USART2_RX_BUF, 0, USART2_MAX_RECV_LEN);
+}
+
+static void esp8266_close_socket(uint16_t settle_ms)
+{
+    USART2_RX_STA = 0;
+    memset(USART2_RX_BUF, 0, USART2_MAX_RECV_LEN);
+    esp8266_log_cmd("AT+CIPCLOSE");
+    u2_printf("AT+CIPCLOSE\r\n");
+
+    for (uint16_t wait = 0U; wait < 200U; wait++) {
+        HAL_Delay(10);
+        if ((USART2_RX_STA & 0x8000U) != 0U) {
+            USART2_RX_BUF[USART2_RX_STA & 0x7FFFU] = 0;
+            if (strstr((const char *)USART2_RX_BUF, "OK") != NULL ||
+                strstr((const char *)USART2_RX_BUF, "ERROR") != NULL ||
+                strstr((const char *)USART2_RX_BUF, "CLOSED") != NULL) {
+                break;
+            }
+            USART2_RX_STA = 0;
+        }
+    }
+
+    HAL_Delay(settle_ms);
+    USART2_RX_STA = 0;
+    memset(USART2_RX_BUF, 0, USART2_MAX_RECV_LEN);
+}
+
 static void esp8266_log_cmd(const char *cmd)
 {
     if (cmd == NULL) {
@@ -541,12 +607,72 @@ static void esp8266_log_ack_miss(const char *rx)
 {
     if (rx == NULL) {
         printf("ESP8266 ack miss\r\n");
+    } else if (strstr(rx, "WIFI DISCONNECT") != NULL) {
+        printf("ESP8266 ack miss: WIFI DISCONNECT\r\n");
+    } else if (strstr(rx, "DNS FAIL") != NULL) {
+        printf("ESP8266 ack miss: DNS FAIL\r\n");
+    } else if (strstr(rx, "CONNECT FAIL") != NULL) {
+        printf("ESP8266 ack miss: CONNECT FAIL\r\n");
+    } else if (strstr(rx, "ALREADY CONNECTED") != NULL) {
+        printf("ESP8266 ack miss: ALREADY CONNECTED\r\n");
+    } else if (strstr(rx, "busy") != NULL) {
+        printf("ESP8266 ack miss: busy\r\n");
+    } else if (strstr(rx, "no ip") != NULL) {
+        printf("ESP8266 ack miss: no ip\r\n");
     } else if (strstr(rx, "ERROR") != NULL) {
         printf("ESP8266 ack miss: ERROR\r\n");
     } else if (strstr(rx, "CLOSED") != NULL) {
         printf("ESP8266 ack miss: CLOSED\r\n");
     } else {
         printf("ESP8266 ack miss\r\n");
+    }
+}
+
+static uint8_t esp8266_start_tcp(const char *host, const char *port)
+{
+    char command[96];
+    uint8_t attempt;
+
+    for (attempt = 0U; attempt < 2U; attempt++) {
+        if (attempt != 0U) {
+            esp8266_close_socket(700);
+        }
+
+        snprintf(command, sizeof(command), "AT+CIPSTART=\"TCP\",\"%s\",%s", host, port);
+        if (esp8266_send_cmd((u8 *)command, (u8 *)"CONNECT", 1200) == 0U) {
+            if (attempt != 0U) {
+                printf("ESP8266 TCP connected after retry\r\n");
+            }
+            return 0U;
+        }
+
+        printf("ESP8266 TCP connect attempt %u failed\r\n", (unsigned int)(attempt + 1U));
+        esp8266_log_link_status();
+    }
+
+    return 1U;
+}
+
+static void esp8266_log_link_status(void)
+{
+    const char *rx;
+
+    if (esp8266_send_cmd((u8 *)"AT+CIPSTATUS", (u8 *)"STATUS", 150) != 0U) {
+        printf("ESP8266 link: status unavailable\r\n");
+        return;
+    }
+
+    rx = (const char *)USART2_RX_BUF;
+    if (strstr(rx, "STATUS:2") != NULL) {
+        printf("ESP8266 link: got ip\r\n");
+    } else if (strstr(rx, "STATUS:3") != NULL) {
+        printf("ESP8266 link: connected\r\n");
+    } else if (strstr(rx, "STATUS:4") != NULL) {
+        printf("ESP8266 link: disconnected\r\n");
+    } else if (strstr(rx, "STATUS:5") != NULL) {
+        printf("ESP8266 link: wifi not connected\r\n");
+    } else {
+        printf("ESP8266 link: status unknown\r\n");
     }
 }
 
@@ -557,11 +683,9 @@ static uint8_t esp8266_http_get_host(const char *host, const char *port, const c
     int request_len;
 
     esp8266_send_cmd((u8 *)"AT+CIPMODE=0", (u8 *)"OK", 100);
-    esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
-    HAL_Delay(300);
+    esp8266_close_socket(500);
 
-    snprintf(command, sizeof(command), "AT+CIPSTART=\"TCP\",\"%s\",%s", host, port);
-    if (esp8266_send_cmd((u8 *)command, (u8 *)"CONNECT", 500)) {
+    if (esp8266_start_tcp(host, port) != 0U) {
         return 3U;
     }
 
@@ -583,18 +707,18 @@ static uint8_t esp8266_http_get_host(const char *host, const char *port, const c
     }
 
     if (request_len <= 0 || request_len >= (int)sizeof(request)) {
-        esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+        esp8266_close_socket(300);
         return 1U;
     }
 
     snprintf(command, sizeof(command), "AT+CIPSEND=%u", (unsigned int)request_len);
     if (esp8266_send_cmd((u8 *)command, (u8 *)">", 300)) {
-        esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+        esp8266_close_socket(300);
         return 1U;
     }
 
     if (esp8266_send_data((u8 *)request, (u8 *)ack, waittime)) {
-        esp8266_send_cmd((u8 *)"AT+CIPCLOSE", NULL, 0);
+        esp8266_close_socket(300);
         return 1U;
     }
 

@@ -13,7 +13,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#define CUBE_MESSAGE_TTL_SECONDS (45UL * 60UL)
+#define CUBE_MESSAGE_TTL_SECONDS (30UL * 60UL)
+#define OPENCLAW_HEALTH_POLL_MS (60UL * 1000UL)
+#define OPENCLAW_MESSAGE_POLL_MS (60UL * 1000UL)
+#define OPENCLAW_STATUS_POLL_MS (5UL * 60UL * 1000UL)
+#define OPENCLAW_TCP_FAIL_RECOVER_LIMIT 2U
 #define HKT_OFFSET_SECONDS (8L * 60L * 60L)
 #define MASCOT_FACE_PREVIEW 0
 #define MASCOT_BASE_X 13
@@ -404,17 +408,13 @@ static void update_mascot_behavior(uint32_t seconds, uint8_t bubble_visible, Net
     {
         face = MASCOT_FACE_CONCERNED;
     }
-    else if (bubble_visible != 0U)
+    else if (mascot_sleepy_time() != 0U)
     {
-        face = MASCOT_FACE_HAPPY;
+        face = MASCOT_FACE_SLEEPY;
     }
     else if ((seconds % 12U) == 5U)
     {
         face = MASCOT_FACE_BLINK;
-    }
-    else if (mascot_sleepy_time() != 0U)
-    {
-        face = MASCOT_FACE_SLEEPY;
     }
 
     set_mascot_face(face);
@@ -543,12 +543,11 @@ static void update_clock_dashboard(uint32_t seconds)
     char claw_cron[16];
     char claw_disk[12];
     char claw_mem[12];
-    char claw_error[24];
     char bubble[144];
     char message_text[96];
     char message_from[24];
     char message_timestamp[32];
-    const char *detail_title = "ERROR";
+    const char *detail_title = "PROC";
     const char *detail_value;
     uint8_t detail_page;
     uint32_t message_age_seconds;
@@ -565,7 +564,6 @@ static void update_clock_dashboard(uint32_t seconds)
     strncpy(claw_cron, claw_cron_text, sizeof(claw_cron) - 1U);
     strncpy(claw_disk, claw_disk_text, sizeof(claw_disk) - 1U);
     strncpy(claw_mem, claw_mem_text, sizeof(claw_mem) - 1U);
-    strncpy(claw_error, claw_error_text, sizeof(claw_error) - 1U);
     cron_warning = claw_cron_warning;
     strncpy(bubble, speech_text, sizeof(bubble) - 1U);
     strncpy(message_text, cube_message_text, sizeof(message_text) - 1U);
@@ -577,25 +575,17 @@ static void update_clock_dashboard(uint32_t seconds)
     claw_cron[sizeof(claw_cron) - 1U] = '\0';
     claw_disk[sizeof(claw_disk) - 1U] = '\0';
     claw_mem[sizeof(claw_mem) - 1U] = '\0';
-    claw_error[sizeof(claw_error) - 1U] = '\0';
     bubble[sizeof(bubble) - 1U] = '\0';
     message_text[sizeof(message_text) - 1U] = '\0';
     message_from[sizeof(message_from) - 1U] = '\0';
     message_timestamp[sizeof(message_timestamp) - 1U] = '\0';
     claw_color = claw_state_color(claw_snapshot);
-    detail_value = claw_error;
+    detail_value = claw_process;
 
     if (alert_active == 0U && message_timestamp[0] != '\0' &&
         cube_message_is_expired(message_timestamp, &message_age_seconds) == 0U)
     {
-        if (message_from[0] != '\0')
-        {
-            snprintf(bubble, sizeof(bubble), "%s:\n%s", message_from, message_text);
-        }
-        else
-        {
-            snprintf(bubble, sizeof(bubble), "%s", message_text);
-        }
+        snprintf(bubble, sizeof(bubble), "%s", message_text);
     }
 
     format_rtc_display(time_text, sizeof(time_text), date_text, sizeof(date_text));
@@ -621,24 +611,21 @@ static void update_clock_dashboard(uint32_t seconds)
     lv_label_set_text(cron_value_label, claw_cron);
     lv_label_set_text(health_value_label, claw_health);
 
-    if (alert_active == 0U && strcmp(claw_error, "none") == 0)
+    detail_page = (uint8_t)((seconds / 2U) % 3U);
+    if (detail_page == 0U)
     {
-        detail_page = (uint8_t)((seconds / 2U) % 3U);
-        if (detail_page == 0U)
-        {
-            detail_title = "PROC";
-            detail_value = claw_process;
-        }
-        else if (detail_page == 1U)
-        {
-            detail_title = "DISK";
-            detail_value = claw_disk;
-        }
-        else
-        {
-            detail_title = "MEM";
-            detail_value = claw_mem;
-        }
+        detail_title = "PROC";
+        detail_value = claw_process;
+    }
+    else if (detail_page == 1U)
+    {
+        detail_title = "DISK";
+        detail_value = claw_disk;
+    }
+    else
+    {
+        detail_title = "MEM";
+        detail_value = claw_mem;
     }
     lv_label_set_text(error_title_label, detail_title);
     lv_label_set_text(error_value_label, detail_value);
@@ -800,6 +787,7 @@ static void monitor_task(void *arg)
     TickType_t last_status_check = 0;
     TickType_t last_message_check = 0;
     uint8_t first_loop = 1U;
+    uint8_t tcp_fail_count = 0U;
 
     while (1)
     {
@@ -830,7 +818,7 @@ static void monitor_task(void *arg)
             }
         }
 
-        if (first_loop || (now - last_health_check) >= pdMS_TO_TICKS(30UL * 1000UL))
+        if (first_loop || (now - last_health_check) >= pdMS_TO_TICKS(OPENCLAW_HEALTH_POLL_MS))
         {
             OpenClawHealthStruct health;
             set_claw_health(CLAW_STATE_CHECKING, "CHECK", "Health...");
@@ -841,33 +829,68 @@ static void monitor_task(void *arg)
                 set_claw_health(strcmp(health.status, "alive") == 0 ? CLAW_STATE_OK : CLAW_STATE_WARN,
                                 strcmp(health.status, "alive") == 0 ? "ONLINE" : "HEALTH",
                                 health.status);
+                tcp_fail_count = 0U;
             }
             else if (health.error_code == 2U)
             {
                 set_claw_health(CLAW_STATE_WARN, "TLS", "Need proxy");
+                tcp_fail_count = 0U;
             }
             else if (health.error_code == 3U)
             {
+                tcp_fail_count++;
                 set_claw_health(CLAW_STATE_OFFLINE, "PROXY", "TCP fail");
             }
             else
             {
                 set_claw_health(CLAW_STATE_OFFLINE, "OFFLINE", "Health fail");
+                tcp_fail_count = 0U;
+            }
+
+            if (tcp_fail_count >= OPENCLAW_TCP_FAIL_RECOVER_LIMIT)
+            {
+                printf("ESP8266 TCP fail recovery\r\n");
+                set_net_status(NET_STATE_WIFI_CONNECTING, "Recovering ESP8266 WiFi");
+                set_claw_health(CLAW_STATE_WAITING, "WAITING", "ESP reset");
+                esp8266_sta_connect();
+                tcp_fail_count = 0U;
+                first_loop = 1U;
+                continue;
             }
         }
 
-        if (first_loop || (xTaskGetTickCount() - last_message_check) >= pdMS_TO_TICKS(30UL * 1000UL))
+        if (first_loop || (xTaskGetTickCount() - last_message_check) >= pdMS_TO_TICKS(OPENCLAW_MESSAGE_POLL_MS))
         {
             OpenClawMessageStruct message;
             message = ESP8266_GetOpenClawMessage();
             last_message_check = xTaskGetTickCount();
+            if (first_loop)
+            {
+                last_message_check -= pdMS_TO_TICKS(OPENCLAW_MESSAGE_POLL_MS / 2UL);
+            }
             if (message.ok)
             {
                 set_cube_message(&message);
+                tcp_fail_count = 0U;
+            }
+            else if (message.error_code == 3U)
+            {
+                tcp_fail_count++;
+            }
+
+            if (tcp_fail_count >= OPENCLAW_TCP_FAIL_RECOVER_LIMIT)
+            {
+                printf("ESP8266 TCP fail recovery\r\n");
+                set_net_status(NET_STATE_WIFI_CONNECTING, "Recovering ESP8266 WiFi");
+                set_claw_health(CLAW_STATE_WAITING, "WAITING", "ESP reset");
+                esp8266_sta_connect();
+                tcp_fail_count = 0U;
+                first_loop = 1U;
+                continue;
             }
         }
 
-        if (first_loop || (xTaskGetTickCount() - last_status_check) >= pdMS_TO_TICKS(5UL * 60UL * 1000UL))
+        if (first_loop || (xTaskGetTickCount() - last_status_check) >= pdMS_TO_TICKS(OPENCLAW_STATUS_POLL_MS))
         {
             OpenClawStatusStruct status;
             set_claw_health(CLAW_STATE_CHECKING, "CHECK", "Status...");
@@ -876,12 +899,32 @@ static void monitor_task(void *arg)
             if (status.ok)
             {
                 set_claw_metrics(&status);
+                tcp_fail_count = 0U;
             }
             else
             {
+                if (status.error_code == 3U)
+                {
+                    tcp_fail_count++;
+                }
+                else
+                {
+                    tcp_fail_count = 0U;
+                }
                 set_claw_health(CLAW_STATE_WARN,
                                 status.error_code == 2U ? "TLS" : (status.error_code == 3U ? "PROXY" : "WAIT"),
                                 status.error_code == 2U ? "Need proxy" : (status.error_code == 3U ? "TCP fail" : "Status wait"));
+            }
+
+            if (tcp_fail_count >= OPENCLAW_TCP_FAIL_RECOVER_LIMIT)
+            {
+                printf("ESP8266 TCP fail recovery\r\n");
+                set_net_status(NET_STATE_WIFI_CONNECTING, "Recovering ESP8266 WiFi");
+                set_claw_health(CLAW_STATE_WAITING, "WAITING", "ESP reset");
+                esp8266_sta_connect();
+                tcp_fail_count = 0U;
+                first_loop = 1U;
+                continue;
             }
         }
 
