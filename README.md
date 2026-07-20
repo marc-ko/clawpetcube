@@ -124,10 +124,15 @@ Do not commit credentials or private hostnames. Keep local values in ignored
 `hal_firmware/Core/Inc/app_config_local.h` or CubeIDE project symbols.
 
 ```c
+#ifndef APP_CONFIG_LOCAL_H
+#define APP_CONFIG_LOCAL_H
+
 #define VPC_WIFI_SSID "..."
 #define VPC_WIFI_PASSWORD "..."
 #define VPC_OPENCLAW_HTTP_HOST "..."
 #define VPC_OPENCLAW_HTTP_PORT "80"
+
+#endif
 ```
 
 The tracked `hal_firmware/Core/Inc/app_config.h` defaults these values to empty
