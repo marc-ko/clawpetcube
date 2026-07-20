@@ -18,6 +18,7 @@
 #define OPENCLAW_MESSAGE_POLL_MS (60UL * 1000UL)
 #define OPENCLAW_STATUS_POLL_MS (5UL * 60UL * 1000UL)
 #define OPENCLAW_TCP_FAIL_RECOVER_LIMIT 2U
+#define DETAIL_PAGE_SECONDS 5U
 #define HKT_OFFSET_SECONDS (8L * 60L * 60L)
 #define MASCOT_FACE_PREVIEW 0
 #define MASCOT_BASE_X 13
@@ -345,8 +346,7 @@ static void update_mascot_face_preview(TickType_t now)
         MASCOT_FACE_BLINK,
         MASCOT_FACE_SLEEPY,
         MASCOT_FACE_CONCERNED,
-        MASCOT_FACE_XX
-    };
+        MASCOT_FACE_XX};
     static TickType_t last_change = 0;
     static uint8_t face_index = 0xFFU;
 
@@ -611,7 +611,7 @@ static void update_clock_dashboard(uint32_t seconds)
     lv_label_set_text(cron_value_label, claw_cron);
     lv_label_set_text(health_value_label, claw_health);
 
-    detail_page = (uint8_t)((seconds / 2U) % 3U);
+    detail_page = (uint8_t)((seconds / DETAIL_PAGE_SECONDS) % 3U);
     if (detail_page == 0U)
     {
         detail_title = "PROC";
