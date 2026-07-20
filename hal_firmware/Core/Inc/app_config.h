@@ -1,7 +1,7 @@
 #ifndef APP_CONFIG_H
 #define APP_CONFIG_H
 
-#define APP_FW_NAME "VPetCube HAL"
+#define APP_FW_NAME "ClawPetCube HAL"
 #define APP_FW_VERSION "0.1.0-hal-migration"
 
 #define APP_UART_BAUDRATE 115200U

@@ -111,8 +111,8 @@ make -C Release all
 
 Expected outputs:
 
-- `Release/VPetCube_HAL.elf`
-- `Release/VPetCube_HAL.hex`
+- `Release/ClawPetCube_HAL.elf`
+- `Release/ClawPetCube_HAL.hex`
 
 If the build compiles `FWLIB/src/stm32f4xx_*.c`, defines
 `USE_STDPERIPH_DRIVER`, or links `VPetCube.elf`, it is using stale generated
@@ -156,7 +156,7 @@ strings.
 | Symptom | Check |
 | --- | --- |
 | `couldn't create signal pipe, Win32 error 5` | `make` is likely resolving to MSYS. Put CubeIDE `make.exe` first in `PATH`. |
-| Build tries `FWLIB/` or `VPetCube.elf` | Generated metadata is stale or the wrong target is selected. Use the HAL `Release/VPetCube_HAL.*` target. |
+| Build tries `FWLIB/` or `VPetCube.elf` | Generated metadata is stale or the wrong target is selected. Use the HAL `Release/ClawPetCube_HAL.*` target. |
 | LCD shows first frame but stops updating | Check TIM3 MSP clock/IRQ and `lv_tick_inc()`; see `hal_firmware/LVGL_BRINGUP_JOURNAL.md`. |
 | ESP8266 direct HTTPS fails | Use the cube plain HTTP endpoint; this AT firmware does not handle the private Cloudflare HTTPS path reliably. |
 | Status shows stale/offline | Check ESP8266 WiFi, cube HTTP host/port config, and serial logs on USART1. |

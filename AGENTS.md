@@ -19,7 +19,7 @@ removed after migration.
 
 ## Build, Test, And Development Commands
 
-- `make -C Release all`: build the active HAL firmware target.
+- `make -C Release all`: build the active HAL firmware target after CubeIDE has generated the managed makefiles.
 - `php -S localhost:8080 -t elec3300`: run the legacy web UI only if that app is
   restored or present locally.
 - `composer install` from `elec3300/`: install PHP dependencies only when working
@@ -27,12 +27,13 @@ removed after migration.
 
 Firmware builds require an ARM embedded GCC toolchain such as
 `arm-none-eabi-gcc`. The known working Windows setup prepends the STM32CubeIDE
-GCC 12.3 toolchain to `PATH` before running `make -C Release all`.
+bundled `make.exe` and GCC 12.3 toolchain to `PATH` before running
+`make -C Release all`.
 
 Expected HAL outputs:
 
-- `Release/VPetCube_HAL.elf`
-- `Release/VPetCube_HAL.hex`
+- `Release/ClawPetCube_HAL.elf`
+- `Release/ClawPetCube_HAL.hex`
 
 If a build compiles `FWLIB/src/stm32f4xx_*.c`, defines `USE_STDPERIPH_DRIVER`,
 or links `VPetCube.elf`, it is using stale generated metadata from the removed

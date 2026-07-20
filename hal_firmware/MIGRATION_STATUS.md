@@ -15,7 +15,7 @@ polish rather than basic HAL bring-up.
 
 - CubeIDE/CubeMX seed project file for STM32F405RGTx.
 - Root CubeIDE project redirected to build the HAL target as
-  `VPetCube_HAL.elf`.
+  `ClawPetCube_HAL.elf`.
 - STM32CubeF4 HAL/CMSIS, FreeRTOS, and FatFs sources vendored under
   `hal_firmware/Drivers` and `hal_firmware/Middlewares`.
 - HAL configuration, FreeRTOS configuration, FatFs configuration, GCC startup,

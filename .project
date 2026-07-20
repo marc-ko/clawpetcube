@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>VPetCube</name>
-	<comment>Active CubeIDE build is the HAL migration target under hal_firmware. Legacy SPL folders remain reference-only.</comment>
+	<name>ClawPetCube</name>
+	<comment>Active CubeIDE build is the ClawPetCube HAL firmware target under hal_firmware.</comment>
 	<projects>
 	</projects>
 	<buildSpec>

@@ -2,6 +2,6 @@ si 1
 speed 2000
 r
 h
-loadbin VPetCube.bin,0x08000000
+loadfile Release/ClawPetCube_HAL.hex
 r
 exit

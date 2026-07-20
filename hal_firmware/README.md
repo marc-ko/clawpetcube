@@ -1,4 +1,4 @@
-# VPetCube HAL Firmware
+# ClawPetCube HAL Firmware
 
 This folder is the active STM32Cube HAL firmware for ClawPetCube. The legacy
 SPL firmware in the repository remains a reference, but new dashboard work
@@ -69,8 +69,8 @@ make -C Release all
 
 Expected outputs:
 
-- `Release/VPetCube_HAL.elf`
-- `Release/VPetCube_HAL.hex`
+- `Release/ClawPetCube_HAL.elf`
+- `Release/ClawPetCube_HAL.hex`
 
 If the CubeIDE console compiles files from `../FWLIB/src/stm32f4xx_*.c`, defines
 `USE_STDPERIPH_DRIVER`, or links a target named `VPetCube.elf`, it is using
@@ -79,7 +79,7 @@ target.
 
 ## Import / Regeneration Notes
 
-1. Open `VPetCube_HAL.ioc` in STM32CubeIDE or CubeMX.
+1. Open `ClawPetCube_HAL.ioc` in STM32CubeIDE or CubeMX.
 2. Generate code into this `hal_firmware` folder.
 3. Preserve the hand-maintained files under `Core/`, `Board/`, and `Compat/`.
 4. Keep include paths for:
