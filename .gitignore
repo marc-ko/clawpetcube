@@ -68,3 +68,5 @@ hal_firmware/Core/Inc/app_config_local.h
 *.list
 *.hex
 *.elf
+Release/
+Debug/
