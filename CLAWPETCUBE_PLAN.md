@@ -138,7 +138,7 @@ Important:
 
 - Use `make -C Release all`.
 - Do not use plain `make -C Release`; the generated makefile behavior can be misleading.
-- If CubeIDE compiles `FWLIB/` or links `VPetCube.elf`, it is building the legacy SPL target, not the HAL target.
+- If CubeIDE compiles `FWLIB/` or links `VPetCube.elf`, it is using stale legacy SPL metadata, not the HAL target.
 
 ## Target User Experience
 
